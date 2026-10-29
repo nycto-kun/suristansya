@@ -7,6 +7,7 @@ class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
 
+  // NOTE: Change this to your local IP (http://10.0.2.2:5000) if testing locally
   static const String baseUrl = 'https://ferry-undoing-sphinx.ngrok-free.dev';
 
   Map<String, String> _jsonHeaders() {
@@ -75,6 +76,8 @@ class ApiService {
     required List<Map<String, dynamic>> predictions,
     Map<String, dynamic>? screening,
     Map<String, List<int>>? images,
+    Map<String, dynamic>? rawProbs,     // <-- NEW: Accepts raw probabilities
+    String? modelVersion,              // <-- NEW: Accepts model version
     String note = '',
     String? timestamp,
   }) async {
@@ -86,6 +89,10 @@ class ApiService {
     if (screening != null) request.fields['screening'] = jsonEncode(screening);
     if (note.isNotEmpty) request.fields['note'] = note;
     if (timestamp != null) request.fields['timestamp'] = timestamp;
+
+    // <-- NEW: Send the raw probs and version to the backend
+    if (rawProbs != null) request.fields['raw_probs'] = jsonEncode(rawProbs);
+    if (modelVersion != null) request.fields['model_version'] = modelVersion;
 
     if (images != null) {
       images.forEach((key, bytes) {

@@ -33,22 +33,16 @@ class XGBWrapper:
 
 
 class XGBPerIterationMetricsCallback(xgb.callback.TrainingCallback):
-    """Records precision/recall/f1/accuracy/support per boosting round."""
     def __init__(self, X_val, y_val, threshold=0.5):
         super().__init__()
         if isinstance(X_val, xgb.DMatrix):
-            self._dval = X_val
-            self.X_val = None
+            self._dval = X_val; self.X_val = None
         else:
-            self.X_val = np.asarray(X_val)
-            self._dval = None
+            self.X_val = np.asarray(X_val); self._dval = None
         self.y_val = np.asarray(y_val).flatten().astype(int)
         self.threshold = threshold
-        self.metrics = {
-            'iteration': [],
-            'precision': [], 'recall': [], 'f1': [], 'accuracy': [],
-            'support_non_anemic': [], 'support_anemic': []
-        }
+        self.metrics = {'iteration': [], 'precision': [], 'recall': [], 'f1': [],
+                        'accuracy': [], 'support_non_anemic': [], 'support_anemic': []}
 
     def after_iteration(self, model, epoch, evals_log):
         if self._dval is None:
@@ -65,69 +59,72 @@ class XGBPerIterationMetricsCallback(xgb.callback.TrainingCallback):
         return False
 
 
-# =============================================================
-# FEATURE ENGINEERING FOR FUSION
-# =============================================================
-
 def engineer_features(X_probs, eps=1e-7):
-    """Expand the 8-dim probability vector into a rich feature set.
-
-    Input:  (N, 8) = [p0_m1, p1_m1, p0_m2, p1_m2, p0_m3, p1_m3, p0_m4, p1_m4]
-    Output: (N, 38)
-    """
+    """8-dim probability vector -> 52-dim engineered feature vector."""
     X = np.asarray(X_probs, dtype=np.float64)
-    p0 = X[:, 0::2]                 # (N, 4)  non-anemic prob per modality
-    p1 = X[:, 1::2]                 # (N, 4)  anemic prob per modality
+    p0 = X[:, 0::2]                 # (N, 4)
+    p1 = X[:, 1::2]                 # (N, 4)
 
     log_odds = np.log((p1 + eps) / (p0 + eps))
     entropy = -(p1 * np.log(p1 + eps) + p0 * np.log(p0 + eps))
     confidence = np.abs(p1 - 0.5) * 2.0
     preds = (p1 >= 0.5).astype(np.float64)
 
-    mean_p1 = p1.mean(axis=1, keepdims=True)
-    std_p1 = p1.std(axis=1, keepdims=True)
-    max_p1 = p1.max(axis=1, keepdims=True)
-    min_p1 = p1.min(axis=1, keepdims=True)
+    mean_p1   = p1.mean(axis=1, keepdims=True)
+    std_p1    = p1.std(axis=1, keepdims=True)
+    max_p1    = p1.max(axis=1, keepdims=True)
+    min_p1    = p1.min(axis=1, keepdims=True)
     median_p1 = np.median(p1, axis=1, keepdims=True)
 
-    vote_sum = preds.sum(axis=1, keepdims=True)
-    log_odds_sum = log_odds.sum(axis=1, keepdims=True)
+    vote_sum      = preds.sum(axis=1, keepdims=True)
+    log_odds_sum  = log_odds.sum(axis=1, keepdims=True)
     log_odds_mean = log_odds.mean(axis=1, keepdims=True)
-    entropy_mean = entropy.mean(axis=1, keepdims=True)
-    conf_mean = confidence.mean(axis=1, keepdims=True)
-    conf_max = confidence.max(axis=1, keepdims=True)
+    entropy_mean  = entropy.mean(axis=1, keepdims=True)
+    conf_mean     = confidence.mean(axis=1, keepdims=True)
+    conf_max      = confidence.max(axis=1, keepdims=True)
 
     w_vote = (p1 * confidence).sum(axis=1, keepdims=True) / (confidence.sum(axis=1, keepdims=True) + eps)
-
     odds = p1 / (p0 + eps)
     log_odds_prod = np.log(odds + eps).sum(axis=1, keepdims=True)
 
-    # Max agreement (mode count across the 4 predicted classes)
     agree_count = np.zeros((X.shape[0], 1))
     for i in range(X.shape[0]):
         c = Counter(preds[i].astype(int))
-        if c:
-            agree_count[i, 0] = c.most_common(1)[0][1]
+        if c: agree_count[i, 0] = c.most_common(1)[0][1]
+
+    # ── NEW (14 dims) ────────────────────────────────────────
+    conf_ranks = np.zeros_like(confidence)
+    for i in range(X.shape[0]):
+        order = np.argsort(-confidence[i])
+        for rank_pos, orig_idx in enumerate(order):
+            conf_ranks[i, orig_idx] = rank_pos
+
+    vote_frac = w_vote
+    vote_std = preds.std(axis=1, keepdims=True)
+    prod_p1 = np.prod(p1 + eps, axis=1, keepdims=True)
+    prod_p0 = np.prod(p0 + eps, axis=1, keepdims=True)
+    llr = np.log((prod_p1 + eps) / (prod_p0 + eps))
+    log_odds_std = log_odds.std(axis=1, keepdims=True)
+    log_odds_max = log_odds.max(axis=1, keepdims=True)
+    log_odds_min = log_odds.min(axis=1, keepdims=True)
+    p1_range = max_p1 - min_p1
+    entropy_std = entropy.std(axis=1, keepdims=True)
 
     feats = np.hstack([
-        p0, p1,                                                    # 8
-        log_odds, entropy, confidence, preds,                      # 16
-        mean_p1, std_p1, max_p1, min_p1, median_p1,                # 5
-        vote_sum, log_odds_sum, log_odds_mean,                     # 3
-        entropy_mean, conf_mean, conf_max,                         # 3
-        w_vote, log_odds_prod, agree_count,                        # 3
-    ])
+        p0, p1, log_odds, entropy, confidence, preds,         # 24
+        mean_p1, std_p1, max_p1, min_p1, median_p1,            # 5
+        vote_sum, log_odds_sum, log_odds_mean,                 # 3
+        entropy_mean, conf_mean, conf_max,                     # 3
+        w_vote, log_odds_prod, agree_count,                    # 3
+        conf_ranks, vote_frac, vote_std,                       # 6
+        prod_p1, prod_p0, llr,                                 # 3
+        log_odds_std, log_odds_max, log_odds_min,              # 3
+        p1_range, entropy_std,                                 # 2
+    ])  # total = 52
     return feats.astype(np.float32)
 
 
-# =============================================================
-# FUSION PIPELINE (bundles feature engineering + trained model)
-# =============================================================
-
 class FusionPipeline:
-    """Sklearn-style wrapper so downstream code can call
-    `pipeline.predict_proba(X_raw_8dim)` directly."""
-
     def __init__(self, model, threshold=0.5):
         self.model = model
         self.threshold = threshold

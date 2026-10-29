@@ -78,7 +78,7 @@ class WelcomeScreen extends StatelessWidget {
 
                 const Spacer(flex: 3),
 
-                // GET STARTED
+                // GET STARTED (Now uses pushNamed instead of pushReplacementNamed)
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
@@ -90,8 +90,7 @@ class WelcomeScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(30),
                       ),
                     ),
-                    onPressed: () =>
-                        Navigator.pushReplacementNamed(context, '/chat'),
+                    onPressed: () => Navigator.pushNamed(context, '/signin'),
                     child: const Text(
                       'GET STARTED',
                       style: TextStyle(
@@ -108,9 +107,9 @@ class WelcomeScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/signin'),
+                      onPressed: () => Navigator.pushNamed(context, '/signup'),
                       child: Text(
-                        'Sign In',
+                        'Sign up',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.9),
                           fontWeight: FontWeight.w600,

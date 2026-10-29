@@ -53,15 +53,19 @@ class AuthStore {
     await prefs.setString(_kAge, age);
   }
 
+  // UPDATE METHOD NOW INCLUDES EMAIL
   Future<void> updateProfile({
     required String name,
+    required String email,
     required String age,
   }) async {
     _name = name;
+    _email = email;
     _age = age;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kName, name);
+    await prefs.setString(_kEmail, email);
     await prefs.setString(_kAge, age);
   }
 

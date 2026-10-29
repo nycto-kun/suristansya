@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_store.dart';
-import '../services/scan_history_store.dart';
 import '../theme/app_theme.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _signOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -45,10 +49,71 @@ class ProfileScreen extends StatelessWidget {
     if (confirmed != true) return;
 
     await AuthStore.instance.clear();
-    await ScanHistoryStore.instance.clear();
 
     if (!context.mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  }
+
+  void _showEditDialog({
+    required String title,
+    required String initialValue,
+    required bool isEmail,
+    required Function(String) onSave,
+  }) {
+    final controller = TextEditingController(text: initialValue);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: isEmail
+              ? TextInputType.emailAddress
+              : TextInputType.text,
+          textCapitalization: isEmail
+              ? TextCapitalization.none
+              : TextCapitalization.words,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              final val = controller.text.trim();
+              if (val.isNotEmpty) {
+                onSave(val);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -56,8 +121,8 @@ class ProfileScreen extends StatelessWidget {
     final store = AuthStore.instance;
     final name = store.name ?? 'Guest';
     final email = store.email ?? 'Not signed in';
+    final age = store.age ?? 'Not set';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
-    final scanCount = ScanHistoryStore.instance.records.length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -123,7 +188,7 @@ class ProfileScreen extends StatelessWidget {
 
               // ── Account section ─────────────────────────
               const Text(
-                'Account',
+                'Account Information',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -139,71 +204,58 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _InfoRow(
+                    _EditableRow(
                       icon: Icons.person_outline_rounded,
                       label: 'Full name',
                       value: name,
+                      onTap: () => _showEditDialog(
+                        title: 'Edit Name',
+                        initialValue: name,
+                        isEmail: false,
+                        onSave: (val) async {
+                          await AuthStore.instance.updateProfile(
+                            name: val,
+                            email: email,
+                            age: age,
+                          );
+                          setState(() {});
+                        },
+                      ),
                     ),
                     const Divider(
                       height: 1,
                       color: AppColors.border,
                       indent: 56,
                     ),
-                    _InfoRow(
+                    _EditableRow(
                       icon: Icons.mail_outline_rounded,
                       label: 'Email',
                       value: email,
+                      onTap: () => _showEditDialog(
+                        title: 'Edit Email',
+                        initialValue: email,
+                        isEmail: true,
+                        onSave: (val) async {
+                          await AuthStore.instance.updateProfile(
+                            name: name,
+                            email: val,
+                            age: age,
+                          );
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      color: AppColors.border,
+                      indent: 56,
+                    ),
+                    _StaticRow(
+                      icon: Icons.cake_outlined,
+                      label: 'Age',
+                      value: age,
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Activity section ────────────────────────
-              const Text(
-                'Activity',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: _ActionRow(
-                  icon: Icons.history_rounded,
-                  label: 'Scan History',
-                  trailing: scanCount > 0
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '$scanCount',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        )
-                      : null,
-                  onTap: () async {
-                    await Navigator.pushNamed(context, '/history');
-                    if (context.mounted) {
-                      (context as Element).markNeedsBuild();
-                    }
-                  },
                 ),
               ),
               const SizedBox(height: 24),
@@ -224,37 +276,13 @@ class ProfileScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Column(
-                  children: [
-                    _ActionRow(
-                      icon: Icons.dns_rounded,
-                      label: 'Backend URL',
-                      onTap: () async {
-                        await Navigator.pushNamed(context, '/backend');
-                        if (context.mounted) {
-                          (context as Element).markNeedsBuild();
-                        }
-                      },
-                    ),
-                    const Divider(
-                      height: 1,
-                      color: AppColors.border,
-                      indent: 56,
-                    ),
-                    _ActionRow(
-                      icon: Icons.lock_outline_rounded,
-                      label: 'Privacy & Data',
-                      onTap: () async {
-                        await Navigator.pushNamed(context, '/privacy');
-                        if (context.mounted) {
-                          (context as Element).markNeedsBuild();
-                        }
-                      },
-                    ),
-                  ],
+                child: _ActionRow(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Privacy & Data',
+                  onTap: () => Navigator.pushNamed(context, '/privacy'),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               // ── Sign out ────────────────────────────────
               SizedBox(
@@ -290,11 +318,66 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class _EditableRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _InfoRow({
+  final VoidCallback onTap;
+  const _EditableRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textMuted),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StaticRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _StaticRow({
     required this.icon,
     required this.label,
     required this.value,
@@ -342,12 +425,10 @@ class _ActionRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Widget? trailing;
   const _ActionRow({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.trailing,
   });
 
   @override
@@ -371,7 +452,6 @@ class _ActionRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (trailing != null) ...[trailing!, const SizedBox(width: 8)],
             const Icon(
               Icons.arrow_forward_ios_rounded,
               size: 14,

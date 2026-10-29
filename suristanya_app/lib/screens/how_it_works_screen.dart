@@ -158,8 +158,8 @@ class HowItWorksScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: () =>
-                      Navigator.pushReplacementNamed(context, '/chat'),
+                  // Changed to route to /signin
+                  onPressed: () => Navigator.pushNamed(context, '/signin'),
                   icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                   label: const Text('Get Started'),
                 ),

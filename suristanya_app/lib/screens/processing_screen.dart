@@ -79,6 +79,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         imageBytes[entry.key.apiKey] = bytes;
       }
 
+      // 1. GET PREDICTION FROM AI
       final predictionResponse = await ApiService.instance.predictFromBytes(images: imageBytes);
 
       ScreeningResult? screeningResponse;
@@ -86,11 +87,17 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         screeningResponse = await ApiService.instance.assessScreen(ScreeningSession.instance.toJson());
       } catch (_) {}
 
-      // SAVE IMAGES TO DATABASE
+      // 2. EXTRACT THE RAW LOGGING DATA
+      final rawProbs = predictionResponse['raw_probs'];
+      final modelVersion = predictionResponse['model_version'];
+
+      // 3. SAVE TO DATABASE (Passing the new variables)
       await ScanHistoryStore.instance.add(
         apiResponse: predictionResponse,
         screening: screeningResponse,
-        images: imageBytes, 
+        images: imageBytes,
+        rawProbs: rawProbs,           // <-- NEW
+        modelVersion: modelVersion,   // <-- NEW
       );
 
       if (!mounted) return;
@@ -186,7 +193,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
             width: 240, height: 240,
             child: AnimatedBuilder(
               animation: _controller,
-              builder: (context, _) {
+              builder: (context, child) {
                 return Stack(
                   alignment: Alignment.center,
                   children: [

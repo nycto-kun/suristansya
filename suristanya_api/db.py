@@ -43,7 +43,6 @@ class Scan(db.Model):
     )
     timestamp = db.Column(db.DateTime, nullable=False, index=True)
 
-    # Flattened summary columns so we can sort/filter without parsing JSON
     score = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.String(50), nullable=False, default="Unknown")
     confidence = db.Column(db.Float, nullable=False, default=0.0)
@@ -51,11 +50,12 @@ class Scan(db.Model):
 
     note = db.Column(db.Text, nullable=False, default="")
 
-    # JSON blobs preserve the exact API shape the Flutter client uses
     predictions_json = db.Column(db.Text, nullable=False, default="[]")
     screening_json = db.Column(db.Text, nullable=True)
-    
-    # ADDED THIS LINE:
     images_json = db.Column(db.Text, nullable=True)
+
+    # NEW COLUMNS FOR FUTURE TRAINING
+    raw_probs = db.Column(db.Text, nullable=True)
+    model_version = db.Column(db.String(50), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

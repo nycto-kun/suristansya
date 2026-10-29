@@ -18,9 +18,6 @@ class ResultsScreen extends StatelessWidget {
       );
     }
 
-    // Support both shapes:
-    //   new: {predictions: {...}, screening: {...} | null}
-    //   legacy (from history): {summary: {...}, predictions: [...]}
     Map<String, dynamic>? predictionsResponse;
     ScreeningResult? screening;
 
@@ -33,21 +30,15 @@ class ResultsScreen extends StatelessWidget {
       } else if (scr is Map) {
         try {
           screening = ScreeningResult.fromJson(scr.cast<String, dynamic>());
-        } catch (_) {
-          screening = null;
-        }
+        } catch (_) {}
       }
     } else if (args['summary'] is Map) {
       predictionsResponse = args;
     }
 
-    if (predictionsResponse == null) {
-      return _scaffoldMessage('Malformed response from server.');
-    }
-
-    final summaryJson = (predictionsResponse['summary'] as Map?)
+    final summaryJson = (predictionsResponse?['summary'] as Map?)
         ?.cast<String, dynamic>();
-    final predictionsJson = predictionsResponse['predictions'] as List?;
+    final predictionsJson = predictionsResponse?['predictions'] as List?;
 
     if (summaryJson == null || predictionsJson == null) {
       return _scaffoldMessage('Malformed response from server.');
@@ -58,7 +49,6 @@ class ResultsScreen extends StatelessWidget {
         .map((p) => Prediction.fromJson((p as Map).cast<String, dynamic>()))
         .toList();
 
-    // Primary finding = highest severity
     final severityRank = {'high': 3, 'moderate': 2, 'low': 1};
     final primary = predictions.isEmpty
         ? null
@@ -74,9 +64,10 @@ class ResultsScreen extends StatelessWidget {
         title: const Text('Your Health Insights'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          // FIXED: Routes back to Dashboard instead of Chat
           onPressed: () => Navigator.pushNamedAndRemoveUntil(
             context,
-            '/chat',
+            '/dashboard',
             (route) => false,
           ),
         ),
@@ -87,7 +78,6 @@ class ResultsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── SCREENING (rule engine) section ─────────
               if (screening != null) ...[
                 _ScreeningCard(screening: screening),
                 const SizedBox(height: 20),
@@ -152,11 +142,10 @@ class ResultsScreen extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
 
-              // ── IMAGE ANALYSIS section ──────────────────
               const _SectionLabel('Image Analysis'),
               const SizedBox(height: 10),
 
-              // Hero score card
+              // Hero Score Card
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -288,7 +277,6 @@ class ResultsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
-              // Key findings header
               Row(
                 children: [
                   const Text(
@@ -362,26 +350,23 @@ class ResultsScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          '/chat',
-                          (route) => false,
-                        );
-                      },
-                      child: const Text('Back to Ava'),
+                      // FIXED: Routes to dashboard and clears history
+                      onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/dashboard',
+                        (route) => false,
+                      ),
+                      child: const Text('Back to Dashboard'),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/full-report',
-                          arguments: args,
-                        );
-                      },
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        '/full-report',
+                        arguments: args,
+                      ),
                       child: const Text('View Full Result'),
                     ),
                   ),
@@ -389,7 +374,12 @@ class ResultsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
+                // FIXED: Starts a fresh scan
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/chat',
+                  (route) => false,
+                ),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Scan Again'),
               ),
@@ -421,7 +411,6 @@ class ResultsScreen extends StatelessWidget {
 class _SectionLabel extends StatelessWidget {
   final String text;
   const _SectionLabel(this.text);
-
   @override
   Widget build(BuildContext context) {
     return Text(
@@ -436,7 +425,6 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-/// Big colored card showing the rule-engine headline.
 class _ScreeningCard extends StatelessWidget {
   final ScreeningResult screening;
   const _ScreeningCard({required this.screening});
@@ -534,7 +522,6 @@ class _ScreeningCard extends StatelessWidget {
   }
 }
 
-/// One rule-engine finding, with its citation.
 class _FindingCard extends StatelessWidget {
   final ScreeningFinding finding;
   const _FindingCard({required this.finding});
