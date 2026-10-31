@@ -1,6 +1,7 @@
 """
 Real ML prediction endpoints for SuriStanya.
 """
+import traceback
 from flask import Blueprint, request, jsonify
 from utils.model_loader import get_models, get_health_status
 from utils.preprocessing import (
@@ -11,8 +12,16 @@ from utils.preprocessing import (
 from utils.fusion import build_fusion_vector, run_fusion
 from utils.response_builder import build_api_response
 
+# Import the VLM describer (ensure utils/vlm_describer.py exists)
+try:
+    from utils.vlm_describer import describe_all_modalities
+except ImportError:
+    describe_all_modalities = None
+    print("[predict] Warning: vlm_describer.py not found. Falling back to hardcoded descriptions.")
+
 predict_bp = Blueprint("predict", __name__)
 REQUIRED_MODALITIES = ["tongue", "palm", "nail", "eye"]
+
 
 def _run_modality(modality: str, image_bytes: bytes) -> dict:
     m = get_models().get(modality)
@@ -39,12 +48,14 @@ def _run_modality(modality: str, image_bytes: bytes) -> dict:
         "low_confidence": low_confidence,
     }
 
+
 @predict_bp.route("/health", methods=["GET"])
 def predict_health():
     return jsonify({
         "status": "ok",
         "models_loaded": get_health_status(),
     })
+
 
 @predict_bp.route("/", methods=["POST"])
 def predict_all():
@@ -53,19 +64,23 @@ def predict_all():
         missing = [k for k in REQUIRED_MODALITIES if k not in request.files]
         return jsonify({
             "error": "Missing images",
-            "received": received,
             "missing": missing,
             "required": REQUIRED_MODALITIES,
         }), 400
 
-    modality_results: dict = {}
+    image_bytes = {}
+    for modality in REQUIRED_MODALITIES:
+        file = request.files[modality]
+        if not file or file.filename == "":
+            return jsonify({"error": f"Empty file for '{modality}'"}), 400
+        image_bytes[modality] = file.read()
+
+    modality_results = {}
     try:
         for modality in REQUIRED_MODALITIES:
-            file = request.files[modality]
-            if not file or file.filename == "":
-                return jsonify({"error": f"Empty file for '{modality}'"}), 400
-            modality_results[modality] = _run_modality(modality, file.read())
+            modality_results[modality] = _run_modality(modality, image_bytes[modality])
     except Exception as exc:
+        traceback.print_exc()
         return jsonify({"error": f"Prediction failed: {exc}"}), 500
 
     fusion_model = get_models().get("fusion")
@@ -75,30 +90,41 @@ def predict_all():
     fusion_vector = build_fusion_vector(modality_results)
     fusion_result = run_fusion(fusion_model, fusion_vector)
 
-    # 1. Bundle the raw probabilities
+    # 1. Build Raw Probs for training logging
     raw_probs = {
         'modalities': {m: r['probabilities'] for m, r in modality_results.items()},
         'fusion': fusion_result['probabilities'],
     }
 
-    # 2. Build normal response
-    response = build_api_response(modality_results, fusion_result)
+    # 2. Get VLM descriptions (fails gracefully if API is down)
+    vlm_descriptions = {}
+    if describe_all_modalities:
+        try:
+            vlm_descriptions = describe_all_modalities(image_bytes, modality_results)
+        except Exception as e:
+            print(f"[predict] VLM failed: {e}")
+
+    # 3. Build response
+    response = build_api_response(modality_results, fusion_result, vlm_descriptions=vlm_descriptions)
     
-    # 3. Attach the new fields
+    # 4. Attach logging data for the database
     response['raw_probs'] = raw_probs
     response['model_version'] = "v1.0-79.4"
-    
+
     return jsonify(response)
+
 
 @predict_bp.route("/<modality>", methods=["POST"])
 def predict_single(modality: str):
     if modality not in REQUIRED_MODALITIES:
         return jsonify({"error": f"Unknown modality: {modality}"}), 400
     if "image" not in request.files:
-        return jsonify({"error": "No image file."}), 400
+        return jsonify({"error": "No image file (key='image')."}), 400
+
     file = request.files["image"]
     if not file or file.filename == "":
         return jsonify({"error": "Empty file."}), 400
+
     try:
         result = _run_modality(modality, file.read())
         result["disclaimer"] = "This is a screening tool only. Not a medical diagnosis."

@@ -1,8 +1,6 @@
 """
 Convert raw ML results into the JSON shape the SuriStanya Flutter
 client expects (summary + predictions[]).
-
-Keeping this contract stable means the frontend needs zero changes.
 """
 
 MODALITY_META = {
@@ -67,8 +65,11 @@ def _confidence_label(conf: float) -> str:
     return "Low"
 
 
-def build_api_response(modality_results: dict, fusion_result: dict) -> dict:
-    """Map ML results to the frontend contract."""
+def build_api_response(modality_results: dict, fusion_result: dict, vlm_descriptions: dict = None) -> dict:
+    """
+    vlm_descriptions: optional {modality: ai_text} dict.
+    If a modality has an AI description, use it. Otherwise fall back to hardcoded text.
+    """
     p_non_anemic = fusion_result["probabilities"][0]
     score = int(round(p_non_anemic * 100))
     status = "Healthy" if fusion_result["label"] == "Non-Anemic" else "Attention"
@@ -81,18 +82,22 @@ def build_api_response(modality_results: dict, fusion_result: dict) -> dict:
         meta = MODALITY_META[modality]
         is_anemic = r["label"] == "Anemic"
 
+        # Use AI-generated description for this modality if available, else fallback
+        if vlm_descriptions and vlm_descriptions.get(modality):
+            description = vlm_descriptions[modality]
+        else:
+            description = (ANEMIC_DESCRIPTIONS[modality] if is_anemic
+                           else NON_ANEMIC_DESCRIPTIONS[modality])
+
         predictions.append({
             "condition": meta["condition"],
             "confidence": round(float(r["confidence"]), 2),
             "severity": _severity_from_prob(float(r["probabilities"][1])),
-            "description": (ANEMIC_DESCRIPTIONS[modality]
-                            if is_anemic
-                            else NON_ANEMIC_DESCRIPTIONS[modality]),
+            "description": description,
             "recommendations": (ANEMIC_RECOMMENDATIONS[modality]
                                 if is_anemic
                                 else NON_ANEMIC_RECOMMENDATIONS[modality]),
             "detected_from": meta["detected_from"],
-            # Extra fields — ignored by current frontend, useful later
             "low_confidence": bool(r.get("low_confidence", False)),
             "raw_probabilities": [round(float(p), 4) for p in r["probabilities"]],
         })
