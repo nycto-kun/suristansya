@@ -49,7 +49,9 @@ class ScanHistoryStore {
     ScreeningResult? screening,
     Map<String, List<int>>? images,
     Map<String, dynamic>? rawProbs,    // <-- NEW
-    String? modelVersion,             // <-- NEW
+    String? modelVersion, 
+    List<String>? symptoms, // <-- NEW
+
   }) async {
     final summaryJson = (apiResponse['summary'] as Map?)?.cast<String, dynamic>() ?? {};
     final predictionsJson = (apiResponse['predictions'] as List?) ?? [];
@@ -63,8 +65,9 @@ class ScanHistoryStore {
           screening: screening?.toJson(),
           timestamp: timestamp.toIso8601String(),
           images: images,
-          rawProbs: rawProbs,          // <-- NEW: Pass to API
+          rawProbs: rawProbs,        // <-- NEW: Pass to API
           modelVersion: modelVersion,  // <-- NEW: Pass to API
+          symptoms: symptoms,  // <-- NEW: Pass to API
         );
         final record = ScanRecord.fromJson(saved);
         _records.insert(0, record);

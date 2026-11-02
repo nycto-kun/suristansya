@@ -76,8 +76,9 @@ class ApiService {
     required List<Map<String, dynamic>> predictions,
     Map<String, dynamic>? screening,
     Map<String, List<int>>? images,
-    Map<String, dynamic>? rawProbs,     // <-- NEW: Accepts raw probabilities
-    String? modelVersion,              // <-- NEW: Accepts model version
+    Map<String, dynamic>? rawProbs,
+    String? modelVersion,
+    List<String>? symptoms, // <-- NEW
     String note = '',
     String? timestamp,
   }) async {
@@ -89,10 +90,9 @@ class ApiService {
     if (screening != null) request.fields['screening'] = jsonEncode(screening);
     if (note.isNotEmpty) request.fields['note'] = note;
     if (timestamp != null) request.fields['timestamp'] = timestamp;
-
-    // <-- NEW: Send the raw probs and version to the backend
     if (rawProbs != null) request.fields['raw_probs'] = jsonEncode(rawProbs);
     if (modelVersion != null) request.fields['model_version'] = modelVersion;
+    if (symptoms != null) request.fields['symptoms'] = jsonEncode(symptoms); // <-- NEW
 
     if (images != null) {
       images.forEach((key, bytes) {

@@ -90,6 +90,7 @@ class _ProcessingScreenState extends State<ProcessingScreen>
       // 2. EXTRACT THE RAW LOGGING DATA
       final rawProbs = predictionResponse['raw_probs'];
       final modelVersion = predictionResponse['model_version'];
+      final symptomsList = ScreeningSession.instance.symptoms.toList();
 
       // 3. SAVE TO DATABASE (Passing the new variables)
       await ScanHistoryStore.instance.add(
@@ -97,7 +98,8 @@ class _ProcessingScreenState extends State<ProcessingScreen>
         screening: screeningResponse,
         images: imageBytes,
         rawProbs: rawProbs,           // <-- NEW
-        modelVersion: modelVersion,   // <-- NEW
+        modelVersion: modelVersion,
+        symptoms: symptomsList,  // <-- NEW
       );
 
       if (!mounted) return;

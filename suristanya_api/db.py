@@ -53,8 +53,11 @@ class Scan(db.Model):
     predictions_json = db.Column(db.Text, nullable=False, default="[]")
     screening_json = db.Column(db.Text, nullable=True)
     images_json = db.Column(db.Text, nullable=True)
+    
+    # NEW: Store symptoms
+    symptoms_json = db.Column(db.Text, nullable=True)
 
-    # NEW COLUMNS FOR FUTURE TRAINING
+    # Logging columns
     raw_probs = db.Column(db.Text, nullable=True)
     model_version = db.Column(db.String(50), nullable=True)
 

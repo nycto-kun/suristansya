@@ -10,6 +10,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
+
 import '../models/body_scan.dart';
 
 class CameraCaptureScreen extends StatefulWidget {
@@ -147,20 +148,47 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     } catch (_) {}
   }
 
-  Future<void> _capture() async {
+    Future<void> _capture() async {
     final c = _controller;
     if (c == null || _capturing) return;
     setState(() => _capturing = true);
     try {
       final file = await c.takePicture();
+      
+      // NEW: Quality Check (Brightness)
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        double brightness = 0;
+        int pixelCount = decoded.width * decoded.height;
+        for (int i = 0; i < pixelCount; i += 50) { // Sample fewer pixels for speed
+          int x = i % decoded.width;
+          int y = i ~/ decoded.width;
+          var pixel = decoded.getPixel(x, y);
+          brightness += (pixel.r + pixel.g + pixel.b) / 3;
+        }
+        brightness = brightness / (pixelCount / 50);
+
+        if (brightness < 50) { // Too dark
+          if (!mounted) return;
+          setState(() => _capturing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image is too dark. Please move to a brighter area and retake.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return; 
+        }
+      }
+
       final cropped = await _cropToGuide(file);
       if (!mounted) return;
       Navigator.pop(context, cropped);
     } catch (e) {
       if (!mounted) return;
       setState(() => _capturing = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Capture failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Capture failed: $e')));
     }
   }
 

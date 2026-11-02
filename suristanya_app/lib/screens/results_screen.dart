@@ -234,7 +234,7 @@ class ResultsScreen extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color:
-                                      summary.status.toLowerCase() == 'healthy'
+                                      summary.status.toLowerCase() == 'non-anemic'
                                       ? AppColors.success.withValues(alpha: 0.9)
                                       : AppColors.warning.withValues(
                                           alpha: 0.9,

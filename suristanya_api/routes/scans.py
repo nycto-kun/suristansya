@@ -1,4 +1,3 @@
-"""Scan history CRUD, scoped to the authenticated user."""
 import json
 import os
 import uuid
@@ -14,7 +13,6 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def _scan_to_dict(scan: Scan) -> dict:
-    # Convert Supabase paths to signed URLs for the app to download
     raw_images = json.loads(scan.images_json) if scan.images_json else {}
     signed_images = {k: signed_url_for(v) for k, v in raw_images.items()}
 
@@ -29,13 +27,13 @@ def _scan_to_dict(scan: Scan) -> dict:
         },
         "predictions": json.loads(scan.predictions_json or "[]"),
         "screening": json.loads(scan.screening_json) if scan.screening_json else None,
+        "symptoms": json.loads(scan.symptoms_json) if scan.symptoms_json else [],
         "images": signed_images,
         "note": scan.note or "",
     }
 
 @scans_bp.route("/uploads/<path:subpath>", methods=["GET"])
 def serve_image(subpath):
-    """Serve locally-stored images (fallback when Supabase isn't used)."""
     return send_from_directory(UPLOAD_DIR, subpath)
 
 @scans_bp.route("", methods=["POST"])
@@ -52,28 +50,24 @@ def create_scan():
     else:
         ts = datetime.utcnow()
 
-    # 1. Upload Images to SUPABASE
     image_paths = {}
     for key in ["tongue", "palm", "nail", "eye"]:
         if key in request.files:
             file = request.files[key]
             if file.filename:
-                # USE SUPABASE UPLOAD INSTEAD OF LOCAL SAVE
-                image_paths[key] = upload_scan_image(
-                    file.read(), scan_uuid, key, g.current_user.uuid
-                )
+                image_paths[key] = upload_scan_image(file.read(), scan_uuid, key, g.current_user.uuid)
 
-    # 2. Parse JSON Data
     summary = json.loads(request.form.get("summary", "{}"))
     predictions = json.loads(request.form.get("predictions", "[]"))
     screening = request.form.get("screening")
     note = request.form.get("note", "").strip()[:500]
     
-    # 3. NEW: Parse raw probs
+    # NEW: Parse symptoms
+    symptoms = request.form.get("symptoms", "[]") 
+    
     raw_probs = request.form.get("raw_probs")
     model_version = request.form.get("model_version", "v1.0-79.4")
 
-    # 4. Save to Database
     scan = Scan(
         uuid=scan_uuid,
         user_id=g.current_user.id,
@@ -86,8 +80,9 @@ def create_scan():
         predictions_json=json.dumps(predictions),
         screening_json=screening if screening else None,
         images_json=json.dumps(image_paths) if image_paths else None,
-        raw_probs=raw_probs,               # SAVING TO DB
-        model_version=model_version        # SAVING TO DB
+        symptoms_json=symptoms if symptoms else None, # NEW
+        raw_probs=raw_probs, 
+        model_version=model_version
     )
     db.session.add(scan)
     db.session.commit()
@@ -109,14 +104,13 @@ def list_scans():
     )
     return jsonify({"scans": [_scan_to_dict(s) for s in scans]})
 
-# ... (keep your existing update_scan, delete_scan, clear_scans routes unchanged) ...
+# (Keep update_scan, delete_scan, clear_scans unchanged)
 @scans_bp.route("/<scan_uuid>", methods=["PATCH"])
 @auth_required
 def update_scan(scan_uuid):
     data = request.get_json(silent=True) or {}
     scan = Scan.query.filter_by(uuid=scan_uuid, user_id=g.current_user.id).first()
-    if not scan:
-        return jsonify({"error": "Scan not found"}), 404
+    if not scan: return jsonify({"error": "Scan not found"}), 404
     if "note" in data:
         scan.note = (data["note"] or "").strip()[:500]
         db.session.commit()
@@ -126,8 +120,7 @@ def update_scan(scan_uuid):
 @auth_required
 def delete_scan(scan_uuid):
     scan = Scan.query.filter_by(uuid=scan_uuid, user_id=g.current_user.id).first()
-    if not scan:
-        return jsonify({"error": "Scan not found"}), 404
+    if not scan: return jsonify({"error": "Scan not found"}), 404
     db.session.delete(scan)
     db.session.commit()
     return jsonify({"ok": True})
